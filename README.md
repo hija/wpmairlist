@@ -1,2 +1,2 @@
 # wpmairlist
-Wordpress Plugin for Mairlist (Just simple, nothing complex).
+Mairlist Plugin for Wordpress (Just simple, nothing complex).
