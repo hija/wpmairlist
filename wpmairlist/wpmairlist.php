@@ -30,12 +30,48 @@ if ( ! defined( 'WPINC' ) ) {
 	die;
 }
 
-function wpmairlist_activation() {
+global $wpmairlist_db_version;
+$wpmairlist_db_version = '1.0';
 
+function wpmairlist_activation() {
+	wpmairlist_install_table();
+}
+
+function wpmairlist_install_table() {
+	global $wpmairlist_db_version;
+	$installed_ver = get_option( "wpmairlist_db_version" );
+	if ( $installed_ver != $wpmairlist_db_version ) {
+		write_log("Creating / Updating database.");
+		global $wpdb;
+		$table_name = $wpdb->prefix . 'wpmairlist';
+
+		$charset_collate = $wpdb->get_charset_collate();
+
+		$sql = "CREATE TABLE $table_name (
+			id mediumint(9) NOT NULL AUTO_INCREMENT,
+			time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			artist text NOT NULL,
+			title text NOT NULL,
+			PRIMARY KEY  (id)
+		) $charset_collate;";
+
+		require_once( ABSPATH . 'wp-admin/includes/upgrade.php' );
+		dbDelta( $sql );
+	}
+	update_option( 'wpmairlist_db_version', $wpmairlist_db_version );
 }
 
 function wpmairlist_deactivation() {
 
+}
+
+function wpmairlist_uninstall() {
+	write_log('Uninstalling plugin... Removing DB.');
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'wpmairlist';
+	$sql = "DROP TABLE IF EXISTS $table_name;";
+	$wpdb->query($sql);
+	delete_option("wpmairlist_db_version");
 }
 
 
@@ -52,6 +88,7 @@ define( 'WPMairlist_VERSION', '1.0.0' );
 
 register_activation_hook(__FILE__, 'wpmairlist_activation');
 register_deactivation_hook(__FILE__, 'wpmairlist_deactivation');
+register_uninstall_hook(__FILE__, 'wpmairlist_uninstall');
 
 add_shortcode('mairlistcurrent', 'show_mairlist_current');
 
