@@ -49,7 +49,7 @@ function wpmairlist_install_table() {
 
 		$sql = "CREATE TABLE $table_name (
 			id mediumint(9) NOT NULL AUTO_INCREMENT,
-			time datetime DEFAULT CURRENT_TIMESTAMP NOT NULL,
+			time datetime DEFAULT '0000-00-00 00:00:00' NOT NULL,
 			artist text NOT NULL,
 			title text NOT NULL,
 			PRIMARY KEY  (id)
@@ -142,6 +142,7 @@ function insert_artist_title($artist, $title){
 		array(
 			'artist' => $artist,
 			'title' => $title,
+			'time' => current_time('mysql', 1)
 		)
 	);
 }
