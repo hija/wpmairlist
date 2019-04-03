@@ -76,7 +76,74 @@ function wpmairlist_uninstall() {
 
 
 function show_mairlist_current($attr){
+	//mairlistcurrent
+	$attr = shortcode_atts( array(
+		'format' => 'all',
+	), $attr, 'mairlistcurrent');
 
+	// Get last song from database
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'wpmairlist';
+
+	$last = $wpdb->get_row("
+		SELECT artist, title, time
+		FROM $table_name
+		ORDER BY id DESC
+		LIMIT 1");
+
+	if(!$last){
+		return;
+	}else{
+		switch($attr['format']){
+			case 'artist':
+				return $last->artist;
+			case 'title':
+				return $last->title;
+			case 'time':
+				return $last->time;
+			default:
+				return $last->artist . ' - ' . $last->title;
+		}
+	}
+}
+
+function wpmairlist_add_endpoint(){
+	add_rewrite_rule('^mairlist/api','index.php?__mairlistapi=1','top');
+	flush_rewrite_rules();
+}
+
+function wpmairlist_add_query_var($vars){
+	$vars[] = '__mairlistapi';
+	return $vars;
+}
+
+function wpmairlist_sniff_requests(){
+	global $wp;
+	if(isset($wp->query_vars['__mairlistapi'])){
+		write_log('Mailirst API request');
+		handle_api_request();
+		exit;
+	}
+}
+
+function handle_api_request(){
+	if(isset($_POST['artist'], $_POST['title'])){
+		insert_artist_title($_POST['artist'], $_POST['title']);
+	}else{
+		write_log('WPMairlist: Missing Parameters in API Request');
+	}
+}
+
+function insert_artist_title($artist, $title){
+	global $wpdb;
+	$table_name = $wpdb->prefix . 'wpmairlist';
+	$wpdb->insert(
+		$table_name,
+		array(
+			'artist' => $artist,
+			'title' => $title,
+		)
+	);
 }
 
 /**
@@ -92,6 +159,10 @@ register_uninstall_hook(__FILE__, 'wpmairlist_uninstall');
 
 add_shortcode('mairlistcurrent', 'show_mairlist_current');
 
+// For endpoint
+add_action('init', 'wpmairlist_add_endpoint');
+add_filter('query_vars', 'wpmairlist_add_query_var');
+add_action('parse_request', 'wpmairlist_sniff_requests');
 
 if (!function_exists('write_log')) {
     function write_log($log) {
