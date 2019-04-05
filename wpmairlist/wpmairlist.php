@@ -41,7 +41,7 @@ function wpmairlist_install_table() {
 	global $wpmairlist_db_version;
 	$installed_ver = get_option( "wpmairlist_db_version" );
 	if ( $installed_ver != $wpmairlist_db_version ) {
-		write_log("Creating / Updating database.");
+		write_log("WPMairlist: Creating / Updating database.");
 		global $wpdb;
 		$table_name = $wpdb->prefix . 'wpmairlist';
 
@@ -66,7 +66,7 @@ function wpmairlist_deactivation() {
 }
 
 function wpmairlist_uninstall() {
-	write_log('Uninstalling plugin... Removing DB.');
+	write_log('WPMairlist: Uninstalling plugin... Removing DB.');
 	global $wpdb;
 	$table_name = $wpdb->prefix . 'wpmairlist';
 	$sql = "DROP TABLE IF EXISTS $table_name;";
@@ -96,17 +96,23 @@ function show_mairlist_current($attr){
 	}else{
 		switch($attr['format']){
 			case 'artist':
-				return $last->artist;
+				return esc_html($last->artist);
 			case 'title':
-				return $last->title;
+				return esc_html($last->title);
 			case 'time':
-				return $last->time;
+				return esc_html($last->time);
 			default:
-				return $last->artist . ' - ' . $last->title;
+				return esc_html($last->artist) . ' - ' . esc_html($last->title);
 		}
 	}
 }
 
+/// THIS IS THE API PART
+/// Works like this:
+/// https://.../mairlist/api -> https:/.../index.php?__mairlistapi=1 (wpmairlist_add_endpoint)
+/// For all other values it is set to 0 (wpmairlist_add_query_var)
+/// If a request contains __marlistapi = 1 (== wpmairlist_add_endpoint)
+/// then we log the $_POST parameters and save the data to database (== handle_api_request)
 function wpmairlist_add_endpoint(){
 	add_rewrite_rule('^mairlist/api','index.php?__mairlistapi=1','top');
 	flush_rewrite_rules();
@@ -120,13 +126,22 @@ function wpmairlist_add_query_var($vars){
 function wpmairlist_sniff_requests(){
 	global $wp;
 	if(isset($wp->query_vars['__mairlistapi'])){
-		write_log('Mailirst API request');
+		write_log('WPMairlist: Mailirst API request');
 		handle_api_request();
 		exit;
 	}
 }
 
 function handle_api_request(){
+
+	$settings = get_option('wpmairlist_settings');
+	if(get_option('wpmairlist_settings') !== FALSE && !empty($settings['wpmairlist_auth_password'])){
+		if(!isset($_POST['auth_password']) || $settings['wpmairlist_auth_password'] !== $_POST['auth_password']){
+			write_log('WPMairlist: Incorrect auth_password --> Aborting!');
+			return;
+		}
+	}
+
 	if(isset($_POST['artist'], $_POST['title'])){
 		insert_artist_title($_POST['artist'], $_POST['title']);
 	}else{
@@ -135,6 +150,7 @@ function handle_api_request(){
 }
 
 function insert_artist_title($artist, $title){
+	write_log('WPMairlist: Insert data into playlist - ' . $artist . ' - ' . $title);
 	global $wpdb;
 	$table_name = $wpdb->prefix . 'wpmairlist';
 	$wpdb->insert(
@@ -146,6 +162,74 @@ function insert_artist_title($artist, $title){
 		)
 	);
 }
+
+
+///////////// SETTINGS PAGE
+
+function wpmairlist_add_admin_menu(  ) {
+	add_submenu_page( 'options-general.php', 'WPMairlist', 'WPMairlist', 'manage_options', 'wpmairlist', 'wpmairlist_options_page' );
+}
+
+
+function wpmairlist_settings_init(  ) {
+	register_setting( 'pluginPage', 'wpmairlist_settings' );
+	add_settings_section(
+		'wpmairlist_pluginPage_section',
+		__( 'General', 'wpmairlist' ),
+		'wpmairlist_settings_section_callback',
+		'pluginPage'
+	);
+
+	add_settings_field(
+		'wpmairlist_auth_password',
+		__( 'Authentication Password', 'wpmairlist' ),
+		'wpmairlist_auth_password_render',
+		'pluginPage',
+		'wpmairlist_pluginPage_section'
+	);
+
+
+}
+
+
+function wpmairlist_auth_password_render(  ) {
+
+	$options = get_option( 'wpmairlist_settings' );
+	?>
+	<input type='password' name='wpmairlist_settings[wpmairlist_auth_password]' value='<?php echo $options['wpmairlist_auth_password']; ?>'>
+	<?php
+
+}
+
+
+function wpmairlist_settings_section_callback(  ) {
+
+	echo __( 'Please set your authentication password here. It should be randomly generated and not easily to guess. <br /> Please use at least 10 characters. Remember to set the password in mairlist as well, otherwise the playlist data cannot be transmitted. <br /><strong>If you do not set a password, everyone can submit data to your playlist!</strong>', 'wpmairlist' );
+
+}
+
+
+function wpmairlist_options_page(  ) {
+
+	?>
+	<form action='options.php' method='post'>
+
+		<h2>WPMairlist</h2>
+
+		<?php
+		settings_fields( 'pluginPage' );
+		do_settings_sections( 'pluginPage' );
+		submit_button();
+		?>
+
+	</form>
+	<?php
+
+}
+
+
+/////// END SETTINGS
+
 
 /**
  * Currently plugin version.
@@ -164,6 +248,11 @@ add_shortcode('mairlistcurrent', 'show_mairlist_current');
 add_action('init', 'wpmairlist_add_endpoint');
 add_filter('query_vars', 'wpmairlist_add_query_var');
 add_action('parse_request', 'wpmairlist_sniff_requests');
+
+
+// For settings
+add_action( 'admin_menu', 'wpmairlist_add_admin_menu' );
+add_action( 'admin_init', 'wpmairlist_settings_init' );
 
 if (!function_exists('write_log')) {
     function write_log($log) {
